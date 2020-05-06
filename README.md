@@ -1,6 +1,5 @@
-# Token Service
-
-# -------------
+# Ktokenizer - Core Token Service
+# -------------------------------
 
 ## Development
 
