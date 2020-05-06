@@ -1,0 +1,22 @@
+# Don't check auto-generated stuff into git
+coverage
+junit
+node_modules
+stats.json
+_jsonSchema.json
+# Cruft
+.DS_Store
+npm-debug.log
+.idea
+sonar-project.properties
+.sonar
+e2e_reports
+tests/nightwatch
+*.log
+npm-debug.*
+internals
+# No gitignore
+config/index.js
+docs
+dist
+test

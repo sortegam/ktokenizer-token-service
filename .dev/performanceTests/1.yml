@@ -1,0 +1,17 @@
+config:
+  target: "https://secure-stg.ktokenizer.com"
+  phases:
+    - duration: 60
+      arrivalRate: 3
+scenarios:
+  - flow:
+      - post:
+          headers:
+            Content-Type: "application/json"
+            Authorization: "Bearer 222222"
+          url: "/v1/tokenservice/tokenize"
+          json:
+            data: "329048209481209481204921834091238409123094824091284092138409213840192841203948213094812309r8320941384091234"
+
+
+

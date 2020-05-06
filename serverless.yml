@@ -1,0 +1,463 @@
+# https://serverless.com/framework/docs/providers/aws/guide/serverless.yml/
+frameworkVersion: '>=1.26.0 <2.0.0'
+
+service:
+  name: tokenservice
+
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-domain-manager
+  - serverless-webpack
+  - serverless-offline
+  - serverless-dynamodb-local
+  - serverless-puresec-cli
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  stage: ${opt:stage, 'dev'}
+  region: eu-west-1
+
+custom:
+  # IAMS Arn for Emilio and Sergi to assign some permissions
+  emaciasIamArn: arn:aws:iam::607922367699:user/emacias
+  sortegaIamArn: arn:aws:iam::607922367699:user/sortega
+  # Domain Manager
+  customDomain:
+    domainName: secure-${self:provider.stage}.ktokenizer.com
+    stage: ${self:provider.stage}
+    endpointType: regional
+    createRoute53Record: true
+    enabled: true
+  webpackIncludeModules:
+    forceExclude:
+      # Since Lambda already has aws-sdk we do not need to include in the artifact
+      - aws-sdk
+  tokenServiceAuthorizerConfig:
+    name: tokenServiceAuthorizer
+    type: request
+    resultTtlInSeconds: 0 # seconds
+    identitySource: method.request.header.Authorization
+  dotenv:
+    path: '.env-${self:provider.stage}'
+    include:
+      # Env variables to be auto-uploaded to lambda stage
+      - KTOKENIZER_STAGE
+      - KTOKENIZER_DYNAMODB_REGION
+      - KTOKENIZER_ENCRYPTED_DATA_HASH_SALT
+      - KTOKENIZER_KMS_KEY_ID
+      - KTOKENIZER_KMS_KEY_REGION
+      - KTOKENIZER_LOG_LEVEL
+  dynamodb:
+    start:
+      migrate: true
+      seed: true
+    seed:
+      development:
+        sources:
+          - table: accounts-${self:provider.stage}
+            sources: [.dev/dynamoSeeds/accounts.json]
+          - table: apikeys-${self:provider.stage}
+            sources: [.dev/dynamoSeeds/apikeys.json]
+
+functions:
+  tokenService:
+    memorySize: 128
+    timeout: 15
+    role: TokenServiceRole
+    handler: src/tokenService/main.handler
+    events:
+      - http:
+          method: post
+          path: v1/tokenservice/tokenize
+          authorizer: ${self:custom.tokenServiceAuthorizerConfig}
+      - http:
+          method: post
+          path: v1/tokenservice/detokenize
+          authorizer: ${self:custom.tokenServiceAuthorizerConfig}
+      - http:
+          method: post
+          path: v1/tokenservice/validate
+          authorizer: ${self:custom.tokenServiceAuthorizerConfig}
+      - http:
+          method: post
+          path: v1/tokenservice/delete
+          authorizer: ${self:custom.tokenServiceAuthorizerConfig}
+      - http:
+          # this method has a Cognito Authorizer defined in Resources sections
+          # this is a trick on Serverless / CloudFormation
+          # since we cannot get the created Arn for the Cognito Authorizer
+          # more info here: https://github.com/serverless/serverless/issues/3212
+          method: get
+          path: v1/backoffice/operations
+  tokenServiceAuthorizer:
+    memorySize: 128
+    timeout: 15
+    handler: src/tokenService/authorizers/tokenServiceAuthorizer.handler
+    role: TokenServiceAuthorizerRole
+resources:
+  Resources:
+    ############################################################################
+    # KMS Setup Definition
+    # We choose to not create a KMS Service every time we deploy a new stage
+    # since KMS keys costs extra money per month
+    # So instead, define your KMS_ID or KMS_ALIAS into .env Variable
+    ############################################################################
+    # KMSService:
+    #   Type: 'AWS::KMS::Key'
+    #   Properties:
+    #     Description: 'YesyPay KMS ${self:provider.stage}'
+    #     Enabled: true
+    #     EnableKeyRotation: false
+    #     KeyPolicy:
+    #       Version: '2012-10-17'
+    #       Id: 'key-ktokenizer-${self:provider.stage}'
+    #       Statement:
+    #         - Sid: 'Allow administration of the key'
+    #           Effect: 'Allow'
+    #           Principal:
+    #             AWS:
+    #               - '${self:custom.emaciasIamArn}'
+    #               - '${self:custom.sortegaIamArn}'
+    #           Action:
+    #             - 'kms:*'
+    #           Resource: '*'
+    #         - Sid: 'Allow use of the key'
+    #           Effect: 'Allow'
+    #           Principal:
+    #             AWS:
+    #               Fn::GetAtt: [TokenServiceRole, Arn]
+    #           Action:
+    #             - 'kms:Encrypt'
+    #             - 'kms:Decrypt'
+    #             - 'kms:ReEncrypt*'
+    #             - 'kms:DescribeKey'
+    #           Resource: '*'
+    # # KMS Alias for the key
+    # KMSAlias:
+    #   Type: 'AWS::KMS::Alias'
+    #   Properties:
+    #     AliasName: alias/ktokenizer-kms-${self:provider.stage}
+    #     TargetKeyId:
+    #       Fn::GetAtt: [KMSService, Arn]
+    ############################################################################
+    # DynamoDB Tables
+    ############################################################################
+    encryptedvaultTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        TableName: encryptedvault-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: vaultId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: vaultId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+    tokendataTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        TableName: tokendata-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: token
+            AttributeType: S
+        KeySchema:
+          - AttributeName: token
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+    operationsTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        TableName: operations-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: operationId
+            AttributeType: S
+          - AttributeName: accountId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: operationId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: operationsByAccountIdSortCreatedAtIndex
+            KeySchema:
+              - AttributeName: accountId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              NonKeyAttributes:
+                - accountId
+                - operationId
+                - type
+                - currentStatus
+                - historicStatus
+                - requestIPAddress
+                - createdAt
+              ProjectionType: INCLUDE
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+    accountsTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        TableName: accounts-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: accountId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: accountId
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+    apikeysTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        TableName: apikeys-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: apiKey
+            AttributeType: S
+          - AttributeName: accountId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: apiKey
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: apiKeysByAccountIdSortCreatedAtIndex
+            KeySchema:
+              - AttributeName: accountId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+    ############################################################################
+    # Roles
+    ############################################################################
+    TokenServiceAuthorizerRole:
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            - Action: sts:AssumeRole
+              Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+          Version: '2012-10-17'
+        Path: /
+        Policies:
+          - PolicyDocument:
+              Statement:
+                - Action:
+                    - dynamodb:GetItem
+                  Effect: Allow
+                  Resource: arn:aws:dynamodb:eu-west-1:607922367699:table/apikeys-${self:provider.stage}
+                - Action:
+                    - logs:PutLogEvents
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                  Effect: Allow
+                  Resource: '*'
+              Version: '2012-10-17'
+            PolicyName: TokenServiceAuthorizerPolicy-${self:provider.stage}
+        RoleName: TokenServiceAuthorizerRole-${self:provider.stage}
+      Type: AWS::IAM::Role
+    TokenServiceRole:
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            - Action: sts:AssumeRole
+              Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+          Version: '2012-10-17'
+        Path: /
+        Policies:
+          - PolicyDocument:
+              Statement:
+                - Action:
+                    - dynamodb:*
+                  Effect: Allow
+                  Resource: '*'
+                - Action:
+                    - kms:Decrypt
+                    - kms:Encrypt
+                  Effect: Allow
+                  Resource: '*'
+                - Action:
+                    - logs:PutLogEvents
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                  Effect: Allow
+                  Resource: '*'
+              Version: '2012-10-17'
+            PolicyName: TokenServicePolicy
+        RoleName: TokenServiceRole-${self:provider.stage}
+      Type: AWS::IAM::Role
+    BackOfficeAuthorizerRole:
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            - Action: sts:AssumeRole
+              Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+          Version: '2012-10-17'
+        Path: /
+        Policies:
+          - PolicyDocument:
+              Statement:
+                - Action:
+                    - dynamodb:GetItem
+                  Effect: Allow
+                  Resource: arn:aws:dynamodb:eu-west-1:607922367699:table/apikeys-${self:provider.stage}
+                - Action:
+                    - logs:PutLogEvents
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                  Effect: Allow
+                  Resource: '*'
+              Version: '2012-10-17'
+            PolicyName: BackOfficeAuthorizerPolicy-${self:provider.stage}
+        RoleName: BackOfficeAuthorizerRole-${self:provider.stage}
+      Type: AWS::IAM::Role
+    BackOfficeRole:
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            - Action: sts:AssumeRole
+              Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+          Version: '2012-10-17'
+        Path: /
+        Policies:
+          - PolicyDocument:
+              Statement:
+                - Action:
+                    - dynamodb:GetItem
+                  Effect: Allow
+                  Resource:
+                    - arn:aws:dynamodb:eu-west-1:607922367699:table/apikeys-${self:provider.stage}
+                    - arn:aws:dynamodb:eu-west-1:607922367699:table/operations-${self:provider.stage}
+                    - arn:aws:dynamodb:eu-west-1:607922367699:table/accounts-${self:provider.stage}
+                - Action:
+                    - logs:PutLogEvents
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                  Effect: Allow
+                  Resource: '*'
+              Version: '2012-10-17'
+            PolicyName: BackOfficePolicy
+        RoleName: BackOfficeRole-${self:provider.stage}
+      Type: AWS::IAM::Role
+    ############################################################################
+    # YesyPay.com Subdomain Name Setup + Bind to API Gateway
+    # At the moment we disable the subdomain setup at CloudFormation setup
+    # since we are using a serverless plugin to handle it: serverless-domain-manager
+    # More info at: https://github.com/amplify-education/serverless-domain-manager
+    ############################################################################
+    # YesyPayDomainName:
+    #   Type: 'AWS::ApiGateway::DomainName'
+    #   Properties:
+    #     DomainName: secure-${self:provider.stage}.ktokenizer.com
+    #     RegionalCertificateArn: arn:aws:acm:eu-west-1:607922367699:certificate/e528c19b-07f1-4627-812c-17410744c606
+    #     EndpointConfiguration:
+    #       Types:
+    #         - REGIONAL
+    # ResApiGatewayDeployment:
+    #   Type: 'AWS::ApiGateway::Deployment'
+    #   DependsOn: ApiGatewayMethodV1TokenserviceTokenizePost
+    #   Properties:
+    #     RestApiId:
+    #       Ref: ApiGatewayRestApi
+    #     StageName: ${self:provider.stage}
+    # YesyPayBasePathMapping:
+    #   Type: 'AWS::ApiGateway::BasePathMapping'
+    #   # DependsOn: ResApiGatewayDeployment
+    #   Properties:
+    #     Stage: ${self:provider.stage}
+    #     DomainName:
+    #       Ref: YesyPayDomainName
+    #     RestApiId:
+    #       Ref: ApiGatewayRestApi
+    ############################################################################
+    # Cognito User Pool
+    ############################################################################
+    MerchantsUserPool:
+      Type: 'AWS::Cognito::UserPool'
+      Properties:
+        UserPoolName: ktokenizer-user-pool-${self:provider.stage}
+        UsernameAttributes:
+          - email
+        SmsVerificationMessage: 'Your verification code is {####}.'
+        AutoVerifiedAttributes:
+          - email
+        MfaConfiguration: 'OFF'
+        EmailVerificationSubject: 'YesyPay verification code'
+        EmailVerificationMessage: 'YesyPay verification code is {####}.'
+        SmsAuthenticationMessage: 'YesyPay authentication code is {####}.'
+        Policies:
+          PasswordPolicy:
+            RequireLowercase: true
+            RequireSymbols: true
+            RequireNumbers: true
+            MinimumLength: 8
+            RequireUppercase: true
+        AdminCreateUserConfig:
+          InviteMessageTemplate:
+            EmailMessage: 'Your YesyPay username is {username} and temporary password is {####}.'
+            EmailSubject: 'Your temporary YesyPay password'
+            SMSMessage: 'Your YesyPay username is {username} and temporary password is {####}.'
+          UnusedAccountValidityDays: 0
+          AllowAdminCreateUserOnly: true
+    # Creates a User Pool Client to be used by the identity pool
+    MerchantsUserPoolClientLogin:
+      Type: 'AWS::Cognito::UserPoolClient'
+      Properties:
+        ClientName: BackOfficeClient-${self:provider.stage}
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - USER_PASSWORD_AUTH
+        UserPoolId:
+          Ref: MerchantsUserPool
+    ############################################################################
+    # CloudFormation / Serverless Hacks
+    ############################################################################
+    # augment the function backoffice / get with an authorizer
+    ApiGatewayMethodV1BackofficeOperationsGet:
+      Properties:
+        AuthorizationType: COGNITO_USER_POOLS
+        AuthorizerId:
+          Ref: BackofficeAuthorizer
+    BackofficeAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        IdentitySource: method.request.header.Authorization
+        Name: backofficeAuthorizer
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        Type: COGNITO_USER_POOLS
+        ProviderARNs:
+          - Fn::GetAtt: [MerchantsUserPool, Arn]

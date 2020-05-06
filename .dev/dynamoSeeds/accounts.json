@@ -1,0 +1,15 @@
+[
+  {
+    "accountId": "1bcdb17f-35e4-4421-b1a5-810d50b73ecc",
+    "apiKeys": [
+      {
+        "apiKey": "111111",
+        "alias": "ApiKey with no permissions"
+      },
+      {
+        "apiKey": "222222",
+        "alias": "ApiKey with full permissions"
+      }
+    ]
+  }
+]

@@ -1,0 +1,90 @@
+{
+  "name": "ktokenizer-token-service",
+  "version": "0.0.1",
+  "description": "KTokenizer - Token Service",
+  "scripts": {
+    "lint": "eslint .",
+    "precommit": "lint-staged",
+    "prepush": "npm run lint && npm run test",
+    "test": "jest",
+    "test:e2e": "jest --runInBand --testRegex '\\.e2e\\.js$'",
+    "test:watch": "jest --watchAll",
+    "start": "KTOKENIZER_LOG_LEVEL=DEBUG concurrently 'sls offline' 'sls dynamodb start -p 8000 --seed=development'",
+    "postinstall": "sls dynamodb install",
+    "deploy": "node internals/deploy.js",
+    "deploy:remove": "node internals/deployRemove.js",
+    "stages": "node internals/stages/main.js"
+  },
+  "lint-staged": {
+    "services/**/*.js": [
+      "eslint"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:sortegam/ktokenizer-token-service.git"
+  },
+  "author": "@sortegam",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "aws-sdk": "^2.307.0",
+    "aws-serverless-express": "^3.3.5",
+    "body-parser": "^1.18.2",
+    "debug": "^3.1.0",
+    "dotenv": "^6.0.0",
+    "dynogels": "git+https://git@github.com/sortegam/dynogels.git",
+    "dynogels-promisified": "^1.0.4",
+    "express": "^4.16.2",
+    "hash.js": "^1.1.5",
+    "helmet": "^3.13.0",
+    "joi": "^13.6.0",
+    "jsonwebtoken": "^8.3.0",
+    "jwk-to-pem": "^2.0.0",
+    "lodash": "^4.17.5",
+    "log4js": "^3.0.5",
+    "uuid": "^3.3.2"
+  },
+  "homepage": "https://gitlab.com/sortegam/ktokenizer-token-service",
+  "devDependencies": {
+    "@babel/core": "^7.0.0",
+    "@babel/plugin-proposal-optional-chaining": "^7.0.0",
+    "@babel/preset-env": "^7.0.0",
+    "axios": "^0.18.0",
+    "babel-core": "^7.0.0-bridge.0",
+    "babel-eslint": "^9.0.0",
+    "babel-loader": "^8.0.2",
+    "babel-plugin-add-header-comment": "^1.0.3",
+    "babel-plugin-source-map-support": "^2.0.0",
+    "colors": "^1.3.2",
+    "concurrently": "^3.6.1",
+    "eslint": "^4.18.1",
+    "eslint-config-airbnb": "^16.1.0",
+    "eslint-plugin-import": "^2.13.0",
+    "eslint-plugin-jest": "^21.22.0",
+    "eslint-plugin-jsx-a11y": "^6.1.1",
+    "eslint-plugin-react": "^7.10.0",
+    "faker": "^4.1.0",
+    "husky": "^0.14.3",
+    "inquirer": "^6.2.0",
+    "jest": "^23.5.0",
+    "lint-staged": "^7.2.2",
+    "replace-in-file": "^3.4.2",
+    "serverless-domain-manager": "^2.6.0",
+    "serverless-dotenv-plugin": "1.1.5",
+    "serverless-dynamodb-local": "0.2.30",
+    "serverless-offline": "^3.25.9",
+    "serverless-puresec-cli": "^1.2.0",
+    "serverless-webpack": "^5.2.0",
+    "webpack": "^4.17.2",
+    "webpack-node-externals": "^1.6.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testRegex": "\\.test\\.js$",
+    "noStackTrace": true,
+    "modulePaths": [
+      "src"
+    ]
+  }
+}

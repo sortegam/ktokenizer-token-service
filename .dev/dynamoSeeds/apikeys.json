@@ -1,0 +1,44 @@
+[
+  {
+    "apiKey": "111111",
+    "alias": "ApiKey with no permissions",
+    "accountId": "54173f6b-cafa-4cf9-9ff6-111111111111",
+    "permissions": {
+      "enabledIPFiltering": true,
+      "IPWhitelist": ["1.2.3.4"],
+      "canTokenize": false,
+      "canDetokenize": false,
+      "canValidateToken": false,
+      "canDeleteToken": false,
+      "canGetOperations": false
+    }
+  },
+  {
+    "apiKey": "222222",
+    "alias": "ApiKey with full permissions",
+    "accountId": "1bcdb17f-35e4-4421-b1a5-810d50b73ecc",
+    "permissions": {
+      "enabledIPFiltering": false,
+      "IPWhitelist": [],
+      "canTokenize": true,
+      "canDetokenize": true,
+      "canValidateToken": true,
+      "canDeleteToken": true,
+      "canGetOperations": true
+    }
+  },
+  {
+    "apiKey": "333333",
+    "alias": "ApiKey with full permissions",
+    "accountId": "54173f6b-cafa-4cf9-9ff6-333333333333",
+    "permissions": {
+      "enabledIPFiltering": false,
+      "IPWhitelist": [],
+      "canTokenize": true,
+      "canDetokenize": true,
+      "canValidateToken": true,
+      "canDeleteToken": true,
+      "canGetOperations": true
+    }
+  }
+]
