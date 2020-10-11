@@ -5,7 +5,7 @@
 
 ### Dependencies
 
-- Install node v8.10.0 (Actually AWS Lambda is using this version)
+- Install node v8.10.0 (At the moment of building this code AWS Lambda was using this version)
   - Recomendation: Use nvm
   - .nvmrc file specified the current node version used in this project.
 - Install last version of serverless globally `npm install -g serverless`
