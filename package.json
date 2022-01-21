@@ -42,7 +42,7 @@
     "jsonwebtoken": "^8.3.0",
     "jwk-to-pem": "^2.0.0",
     "lodash": "^4.17.19",
-    "log4js": "^3.0.5",
+    "log4js": "^6.4.0",
     "uuid": "^3.3.2"
   },
   "homepage": "https://gitlab.com/sortegam/ktokenizer-token-service",
