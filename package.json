@@ -35,7 +35,7 @@
     "dotenv": "^6.0.0",
     "dynogels": "git+https://git@github.com/sortegam/dynogels.git",
     "dynogels-promisified": "^1.0.4",
-    "express": "^4.16.2",
+    "express": "^4.17.3",
     "hash.js": "^1.1.5",
     "helmet": "^3.13.0",
     "joi": "^13.6.0",
